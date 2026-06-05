@@ -16,12 +16,15 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ScaleBuddyAudio")
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ScaleBuddyAudio") else {
+      return
+    }
+
     let channel = FlutterMethodChannel(
       name: "scale_buddy/audio",
       binaryMessenger: registrar.messenger()
     )
-    channel.setMethodCallHandler { [weak self] call, result in
+    channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "playTone":
         guard
