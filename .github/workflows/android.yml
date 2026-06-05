@@ -1,4 +1,4 @@
-name: iOS CI
+name: Android CI
 
 on:
   push:
@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  ios-simulator-build:
-    name: Analyze, test, and build iOS simulator app
-    runs-on: macos-15
+  android-debug-build:
+    name: Analyze, test, and build Android debug APK
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -40,12 +40,12 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build iOS simulator app
-        run: flutter build ios --simulator --debug --no-codesign
+      - name: Build Android debug APK
+        run: flutter build apk --debug
 
-      - name: Upload simulator app artifact
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScaleBuddy-iOS-simulator-app
-          path: build/ios/iphonesimulator/Runner.app
+          name: ScaleBuddy-Android-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
