@@ -51,6 +51,56 @@ class _ScalePlayerScreenState extends State<ScalePlayerScreen> {
 
   int get _stepDurationMs => (60000 / _bpm).round();
 
+  void _openControls() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void updateRoot(PitchClass value) {
+              setState(() => _root = value);
+              setModalState(() {});
+            }
+
+            void updateScale(ScalePattern value) {
+              setState(() => _scalePattern = value);
+              setModalState(() {});
+            }
+
+            void updateBpm(int value) {
+              setState(() => _bpm = value);
+              setModalState(() {});
+            }
+
+            return SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  0,
+                  20,
+                  20 + MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: _ControlPanel(
+                  root: _root,
+                  scalePattern: _scalePattern,
+                  bpm: _bpm,
+                  isPlaying: _isPlaying,
+                  onRootChanged: updateRoot,
+                  onScaleChanged: updateScale,
+                  onBpmChanged: updateBpm,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _togglePlayback() async {
     if (_isPlaying) {
       setState(() {
@@ -103,7 +153,11 @@ class _ScalePlayerScreenState extends State<ScalePlayerScreen> {
               sliver: SliverToBoxAdapter(
                 child: Row(
                   children: [
-                    const Icon(Icons.graphic_eq, size: 34),
+                    IconButton.filledTonal(
+                      onPressed: _openControls,
+                      icon: const Icon(Icons.menu),
+                      tooltip: 'Controls',
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -122,18 +176,12 @@ class _ScalePlayerScreenState extends State<ScalePlayerScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
               sliver: SliverToBoxAdapter(
-                child: _ControlPanel(
+                child: _ScaleSummary(
                   root: _root,
                   scalePattern: _scalePattern,
                   bpm: _bpm,
-                  isPlaying: _isPlaying,
-                  onRootChanged: (value) => setState(() => _root = value),
-                  onScaleChanged: (value) {
-                    setState(() => _scalePattern = value);
-                  },
-                  onBpmChanged: (value) => setState(() => _bpm = value),
                 ),
               ),
             ),
@@ -146,6 +194,37 @@ class _ScalePlayerScreenState extends State<ScalePlayerScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ScaleSummary extends StatelessWidget {
+  const _ScaleSummary({
+    required this.root,
+    required this.scalePattern,
+    required this.bpm,
+  });
+
+  final PitchClass root;
+  final ScalePattern scalePattern;
+  final int bpm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.tune, size: 18, color: Color(0xff768078)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '${root.label} ${scalePattern.label} · $bpm BPM',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: const Color(0xff46524c),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -182,6 +261,13 @@ class _ControlPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Controls',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 18),
             Text('Key', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             Wrap(
