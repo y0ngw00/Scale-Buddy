@@ -418,9 +418,10 @@ class _StaffPainter extends CustomPainter {
     final bottomLineY = topLineY + lineSpacing * 4;
     final noteAreaWidth = staffWidth - 20;
     final stepX = notes.length <= 1 ? 0.0 : noteAreaWidth / (notes.length - 1);
-
-    _drawStaff(canvas, staffLeft, staffRight, topLineY, lineSpacing);
     final clefX = staffLeft - keySignatureWidth - 54;
+    final staffLineLeft = keySignature.count == 0 ? staffLeft : clefX + 42;
+
+    _drawStaff(canvas, staffLineLeft, staffRight, topLineY, lineSpacing);
     _drawClef(canvas, clefX, topLineY - 17);
     _drawKeySignature(canvas, keySignature, clefX + 44, bottomLineY, halfStep);
 
@@ -489,29 +490,78 @@ class _StaffPainter extends CustomPainter {
     final count = keySignature.count.abs();
 
     for (var index = 0; index < count; index += 1) {
-      final y = bottomLineY - steps[index] * halfStep - 13;
-      _drawKeySignatureSymbol(canvas, symbol, x + index * 13, y);
+      final center = Offset(
+        x + index * 13,
+        bottomLineY - steps[index] * halfStep,
+      );
+      _drawKeySignatureSymbol(canvas, symbol, center);
     }
   }
 
-  void _drawKeySignatureSymbol(
-    Canvas canvas,
-    String symbol,
-    double x,
-    double y,
-  ) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: symbol,
-        style: const TextStyle(
-          color: _staffColor,
-          fontSize: 21,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    painter.paint(canvas, Offset(x, y));
+  void _drawKeySignatureSymbol(Canvas canvas, String symbol, Offset center) {
+    if (symbol == '#') {
+      _drawSharpSymbol(canvas, center);
+    } else {
+      _drawFlatSymbol(canvas, center);
+    }
+  }
+
+  void _drawSharpSymbol(Canvas canvas, Offset center) {
+    final paint = Paint()
+      ..color = _staffColor
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(
+      Offset(center.dx - 3.5, center.dy - 12),
+      Offset(center.dx - 3.5, center.dy + 12),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx + 3.5, center.dy - 12),
+      Offset(center.dx + 3.5, center.dy + 12),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx - 9, center.dy - 4),
+      Offset(center.dx + 9, center.dy - 7),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx - 9, center.dy + 6),
+      Offset(center.dx + 9, center.dy + 3),
+      paint,
+    );
+  }
+
+  void _drawFlatSymbol(Canvas canvas, Offset center) {
+    final paint = Paint()
+      ..color = _staffColor
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(
+      Offset(center.dx - 2, center.dy - 15),
+      Offset(center.dx - 2, center.dy + 8),
+      paint,
+    );
+
+    final path = Path()
+      ..moveTo(center.dx - 2, center.dy - 1)
+      ..quadraticBezierTo(
+        center.dx + 10,
+        center.dy - 5,
+        center.dx + 8,
+        center.dy + 4,
+      )
+      ..quadraticBezierTo(
+        center.dx + 6,
+        center.dy + 12,
+        center.dx - 2,
+        center.dy + 8,
+      );
+    canvas.drawPath(path, paint);
   }
 
   void _drawLedgerLines(
