@@ -1,0 +1,87 @@
+package com.scalebuddy.scale_buddy
+
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.plugin.common.MethodChannel
+import kotlin.concurrent.thread
+import kotlin.math.PI
+import kotlin.math.sin
+
+class MainActivity : FlutterActivity() {
+    private var playbackThread: Thread? = null
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "scale_buddy/audio"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "playTone" -> {
+                    val frequency = call.argument<Double>("frequency") ?: 440.0
+                    val durationMs = call.argument<Int>("durationMs") ?: 400
+                    playTone(frequency, durationMs)
+                    result.success(null)
+                }
+                "stop" -> {
+                    stopTone()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun playTone(frequency: Double, durationMs: Int) {
+        stopTone()
+
+        playbackThread = thread(start = true, name = "ScaleBuddyTone") {
+            val sampleRate = 44100
+            val sampleCount = sampleRate * durationMs / 1000
+            val buffer = ShortArray(sampleCount)
+            val fadeSamples = minOf(sampleRate / 100, sampleCount / 2)
+
+            for (index in buffer.indices) {
+                val fadeIn = if (fadeSamples == 0) 1.0 else (index.toDouble() / fadeSamples).coerceAtMost(1.0)
+                val fadeOut = if (fadeSamples == 0) 1.0 else ((buffer.size - index).toDouble() / fadeSamples).coerceAtMost(1.0)
+                val envelope = minOf(fadeIn, fadeOut)
+                val wave = sin(2.0 * PI * index * frequency / sampleRate)
+                buffer[index] = (wave * envelope * Short.MAX_VALUE * 0.28).toInt().toShort()
+            }
+
+            val audioTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(buffer.size * 2)
+                .build()
+
+            try {
+                audioTrack.play()
+                audioTrack.write(buffer, 0, buffer.size)
+            } finally {
+                audioTrack.stop()
+                audioTrack.release()
+            }
+        }
+    }
+
+    private fun stopTone() {
+        playbackThread?.interrupt()
+        playbackThread = null
+    }
+}
