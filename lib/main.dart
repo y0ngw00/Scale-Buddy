@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'src/audio/scale_audio_player.dart';
@@ -138,7 +140,7 @@ class _ScalePlayerScreenState extends State<ScalePlayerScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               sliver: SliverToBoxAdapter(
-                child: _ScaleStrip(notes: scale, activeStep: _activeStep),
+                child: _StaffNotation(notes: scale, activeStep: _activeStep),
               ),
             ),
           ],
@@ -240,8 +242,8 @@ class _ControlPanel extends StatelessWidget {
   }
 }
 
-class _ScaleStrip extends StatelessWidget {
-  const _ScaleStrip({required this.notes, required this.activeStep});
+class _StaffNotation extends StatelessWidget {
+  const _StaffNotation({required this.notes, required this.activeStep});
 
   final List<ScaleNote> notes;
   final int? activeStep;
@@ -253,43 +255,257 @@ class _ScaleStrip extends StatelessWidget {
       children: [
         Text('Notes', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final tileWidth = constraints.maxWidth >= 560 ? 68.0 : 56.0;
-            return Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: notes.asMap().entries.map((entry) {
-                final index = entry.key;
-                final note = entry.value;
-                final active = activeStep == index;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  width: tileWidth,
-                  height: 58,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: active ? const Color(0xff24745f) : Colors.white,
-                    border: Border.all(
-                      color: active
-                          ? const Color(0xff24745f)
-                          : const Color(0xffdde3d6),
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    note.label,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: active ? Colors.white : const Color(0xff1f2925),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                );
-              }).toList(),
-            );
-          },
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xffdde3d6)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SizedBox(
+            height: 190,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: _StaffPainter(notes: notes, activeStep: activeStep),
+            ),
+          ),
         ),
       ],
     );
+  }
+}
+
+class _StaffPainter extends CustomPainter {
+  const _StaffPainter({required this.notes, required this.activeStep});
+
+  final List<ScaleNote> notes;
+  final int? activeStep;
+
+  static const _staffColor = Color(0xff1f2925);
+  static const _mutedColor = Color(0xff768078);
+  static const _activeColor = Color(0xff24745f);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final staffLeft = math.min(82.0, size.width * 0.18);
+    final staffRight = size.width - 18;
+    final staffWidth = staffRight - staffLeft;
+    final lineSpacing = math.min(13.0, size.width / 34);
+    final halfStep = lineSpacing / 2;
+    final topLineY = 48.0;
+    final bottomLineY = topLineY + lineSpacing * 4;
+    final noteAreaWidth = staffWidth - 20;
+    final stepX = notes.length <= 1 ? 0.0 : noteAreaWidth / (notes.length - 1);
+
+    _drawStaff(canvas, staffLeft, staffRight, topLineY, lineSpacing);
+    _drawClef(canvas, staffLeft - 54, topLineY - 17);
+
+    for (var index = 0; index < notes.length; index += 1) {
+      final note = notes[index];
+      final active = activeStep == index;
+      final x = staffLeft + 10 + stepX * index;
+      final staffStep = _staffStep(note);
+      final y = bottomLineY - staffStep * halfStep;
+
+      _drawLedgerLines(canvas, x, y, staffStep, bottomLineY, halfStep);
+      _drawNote(canvas, x, y, note, active, bottomLineY);
+      _drawNoteLabel(canvas, note.label, x, bottomLineY + 48, active);
+    }
+  }
+
+  void _drawStaff(
+    Canvas canvas,
+    double left,
+    double right,
+    double top,
+    double spacing,
+  ) {
+    final paint = Paint()
+      ..color = _staffColor
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+
+    for (var line = 0; line < 5; line += 1) {
+      final y = top + spacing * line;
+      canvas.drawLine(Offset(left, y), Offset(right, y), paint);
+    }
+  }
+
+  void _drawClef(Canvas canvas, double x, double y) {
+    final painter = TextPainter(
+      text: const TextSpan(
+        text: 'G',
+        style: TextStyle(
+          color: _staffColor,
+          fontSize: 42,
+          fontStyle: FontStyle.italic,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, Offset(x, y));
+  }
+
+  void _drawLedgerLines(
+    Canvas canvas,
+    double x,
+    double y,
+    int staffStep,
+    double bottomLineY,
+    double halfStep,
+  ) {
+    final paint = Paint()
+      ..color = _staffColor
+      ..strokeWidth = 1.3
+      ..strokeCap = StrokeCap.round;
+
+    final ledgerSteps = <int>[];
+    if (staffStep < 0) {
+      for (var step = 0; step >= staffStep; step -= 2) {
+        if (step < 0) {
+          ledgerSteps.add(step);
+        }
+      }
+    } else if (staffStep > 8) {
+      for (var step = 10; step <= staffStep; step += 2) {
+        ledgerSteps.add(step);
+      }
+    }
+
+    for (final step in ledgerSteps) {
+      final ledgerY = bottomLineY - step * halfStep;
+      canvas.drawLine(Offset(x - 13, ledgerY), Offset(x + 13, ledgerY), paint);
+    }
+
+    if (staffStep < -1 || staffStep > 9) {
+      final markerPaint = Paint()
+        ..color = _mutedColor.withValues(alpha: 0.12)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(x, y), 16, markerPaint);
+    }
+  }
+
+  void _drawNote(
+    Canvas canvas,
+    double x,
+    double y,
+    ScaleNote note,
+    bool active,
+    double bottomLineY,
+  ) {
+    final noteColor = active ? _activeColor : _staffColor;
+    final notePaint = Paint()
+      ..color = noteColor
+      ..style = PaintingStyle.fill;
+    final stemPaint = Paint()
+      ..color = noteColor
+      ..strokeWidth = active ? 2.8 : 2.1
+      ..strokeCap = StrokeCap.round;
+    final radiusX = active ? 10.0 : 8.6;
+    final radiusY = active ? 7.2 : 6.2;
+
+    if (active) {
+      canvas.drawCircle(
+        Offset(x, y),
+        17,
+        Paint()
+          ..color = _activeColor.withValues(alpha: 0.13)
+          ..style = PaintingStyle.fill,
+      );
+    }
+
+    canvas.save();
+    canvas.translate(x, y);
+    canvas.rotate(-0.22);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: radiusX * 2,
+        height: radiusY * 2,
+      ),
+      notePaint,
+    );
+    canvas.restore();
+
+    final stemUp = y >= bottomLineY - 4 * (13.0 / 2);
+    final stemX = stemUp ? x + radiusX - 1 : x - radiusX + 1;
+    final stemEndY = stemUp ? y - 44 : y + 44;
+    canvas.drawLine(Offset(stemX, y), Offset(stemX, stemEndY), stemPaint);
+
+    final accidental = _accidental(note.name);
+    if (accidental != null) {
+      _drawAccidental(canvas, accidental, x - 27, y - 14, active);
+    }
+  }
+
+  void _drawAccidental(
+    Canvas canvas,
+    String accidental,
+    double x,
+    double y,
+    bool active,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: accidental,
+        style: TextStyle(
+          color: active ? _activeColor : _staffColor,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, Offset(x, y));
+  }
+
+  void _drawNoteLabel(
+    Canvas canvas,
+    String label,
+    double centerX,
+    double y,
+    bool active,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: active ? _activeColor : _mutedColor,
+          fontSize: 12,
+          fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, Offset(centerX - painter.width / 2, y));
+  }
+
+  int _staffStep(ScaleNote note) {
+    const letters = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+    final letter = note.name.substring(0, 1);
+    final letterIndex = letters.indexOf(letter);
+    final e4Index = 4 * 7 + letters.indexOf('E');
+    return note.octave * 7 + letterIndex - e4Index;
+  }
+
+  String? _accidental(String noteName) {
+    if (noteName.contains('bb')) {
+      return 'bb';
+    }
+    if (noteName.contains('##')) {
+      return '##';
+    }
+    if (noteName.contains('b')) {
+      return 'b';
+    }
+    if (noteName.contains('#')) {
+      return '#';
+    }
+    return null;
+  }
+
+  @override
+  bool shouldRepaint(covariant _StaffPainter oldDelegate) {
+    return oldDelegate.notes != notes || oldDelegate.activeStep != activeStep;
   }
 }
