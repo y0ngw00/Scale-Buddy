@@ -11,6 +11,8 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 class MainActivity : FlutterActivity() {
+    private val audioLock = Any()
+    private var activeAudioTrack: AudioTrack? = null
     private var playbackThread: Thread? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -39,7 +41,7 @@ class MainActivity : FlutterActivity() {
     private fun playTone(frequency: Double, durationMs: Int) {
         stopTone()
 
-        playbackThread = thread(start = true, name = "ScaleBuddyTone") {
+        val worker = thread(start = true, name = "ScaleBuddyTone") {
             val sampleRate = 44100
             val sampleCount = sampleRate * durationMs / 1000
             val buffer = ShortArray(sampleCount)
@@ -68,20 +70,66 @@ class MainActivity : FlutterActivity() {
                         .build()
                 )
                 .setBufferSizeInBytes(buffer.size * 2)
+                .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
 
             try {
-                audioTrack.play()
+                synchronized(audioLock) {
+                    activeAudioTrack = audioTrack
+                }
+
                 audioTrack.write(buffer, 0, buffer.size)
+                audioTrack.play()
+                Thread.sleep(durationMs.toLong())
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } catch (_: IllegalStateException) {
+                // The track may already be stopped when the user taps Stop quickly.
             } finally {
-                audioTrack.stop()
-                audioTrack.release()
+                releaseTrack(audioTrack)
+                synchronized(audioLock) {
+                    if (activeAudioTrack === audioTrack) {
+                        activeAudioTrack = null
+                    }
+                    if (playbackThread === Thread.currentThread()) {
+                        playbackThread = null
+                    }
+                }
             }
+        }
+
+        synchronized(audioLock) {
+            playbackThread = worker
         }
     }
 
     private fun stopTone() {
-        playbackThread?.interrupt()
-        playbackThread = null
+        val threadToStop: Thread?
+        val trackToStop: AudioTrack?
+
+        synchronized(audioLock) {
+            threadToStop = playbackThread
+            trackToStop = activeAudioTrack
+            playbackThread = null
+            activeAudioTrack = null
+        }
+
+        threadToStop?.interrupt()
+        trackToStop?.let { releaseTrack(it) }
+    }
+
+    private fun releaseTrack(audioTrack: AudioTrack) {
+        try {
+            audioTrack.pause()
+            audioTrack.flush()
+        } catch (_: IllegalStateException) {
+            // Ignore tracks that were already stopped or not fully initialized.
+        } finally {
+            try {
+                audioTrack.release()
+            } catch (_: IllegalStateException) {
+                // Ignore duplicate release attempts during rapid note changes.
+            }
+        }
     }
 }

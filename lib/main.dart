@@ -55,6 +55,7 @@ class _ScalePlayerScreenState extends State<ScalePlayerScreen> {
         _isPlaying = false;
         _activeStep = null;
       });
+      await _audioPlayer.stop();
       return;
     }
 

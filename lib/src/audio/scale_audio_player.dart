@@ -13,7 +13,11 @@ class ScaleAudioPlayer {
     });
   }
 
-  Future<void> dispose() {
+  Future<void> stop() {
     return _channel.invokeMethod<void>('stop');
+  }
+
+  Future<void> dispose() {
+    return stop();
   }
 }
