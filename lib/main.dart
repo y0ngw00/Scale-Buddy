@@ -188,7 +188,12 @@ class _ScalePlayerScreenState extends State<ScalePlayerScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               sliver: SliverToBoxAdapter(
-                child: _StaffNotation(notes: scale, activeStep: _activeStep),
+                child: _StaffNotation(
+                  root: _root,
+                  scalePattern: _scalePattern,
+                  notes: scale,
+                  activeStep: _activeStep,
+                ),
               ),
             ),
           ],
@@ -329,8 +334,15 @@ class _ControlPanel extends StatelessWidget {
 }
 
 class _StaffNotation extends StatelessWidget {
-  const _StaffNotation({required this.notes, required this.activeStep});
+  const _StaffNotation({
+    required this.root,
+    required this.scalePattern,
+    required this.notes,
+    required this.activeStep,
+  });
 
+  final PitchClass root;
+  final ScalePattern scalePattern;
   final List<ScaleNote> notes;
   final int? activeStep;
 
@@ -351,7 +363,12 @@ class _StaffNotation extends StatelessWidget {
             height: 190,
             width: double.infinity,
             child: CustomPaint(
-              painter: _StaffPainter(notes: notes, activeStep: activeStep),
+              painter: _StaffPainter(
+                root: root,
+                scalePattern: scalePattern,
+                notes: notes,
+                activeStep: activeStep,
+              ),
             ),
           ),
         ),
@@ -360,9 +377,22 @@ class _StaffNotation extends StatelessWidget {
   }
 }
 
-class _StaffPainter extends CustomPainter {
-  const _StaffPainter({required this.notes, required this.activeStep});
+class _KeySignature {
+  const _KeySignature(this.count);
 
+  final int count;
+}
+
+class _StaffPainter extends CustomPainter {
+  const _StaffPainter({
+    required this.root,
+    required this.scalePattern,
+    required this.notes,
+    required this.activeStep,
+  });
+
+  final PitchClass root;
+  final ScalePattern scalePattern;
   final List<ScaleNote> notes;
   final int? activeStep;
 
@@ -372,7 +402,14 @@ class _StaffPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final staffLeft = math.min(82.0, size.width * 0.18);
+    final keySignature = _keySignature(root, scalePattern);
+    final keySignatureWidth = keySignature.count == 0
+        ? 0.0
+        : keySignature.count.abs() * 13.0 + 8.0;
+    final staffLeft = math.min(
+      82.0 + keySignatureWidth,
+      math.max(82.0, size.width * 0.32),
+    );
     final staffRight = size.width - 18;
     final staffWidth = staffRight - staffLeft;
     final lineSpacing = math.min(13.0, size.width / 34);
@@ -383,7 +420,9 @@ class _StaffPainter extends CustomPainter {
     final stepX = notes.length <= 1 ? 0.0 : noteAreaWidth / (notes.length - 1);
 
     _drawStaff(canvas, staffLeft, staffRight, topLineY, lineSpacing);
-    _drawClef(canvas, staffLeft - 54, topLineY - 17);
+    final clefX = staffLeft - keySignatureWidth - 54;
+    _drawClef(canvas, clefX, topLineY - 17);
+    _drawKeySignature(canvas, keySignature, clefX + 44, bottomLineY, halfStep);
 
     for (var index = 0; index < notes.length; index += 1) {
       final note = notes[index];
@@ -393,7 +432,7 @@ class _StaffPainter extends CustomPainter {
       final y = bottomLineY - staffStep * halfStep;
 
       _drawLedgerLines(canvas, x, y, staffStep, bottomLineY, halfStep);
-      _drawNote(canvas, x, y, note, active, bottomLineY);
+      _drawNote(canvas, x, y, note, active, bottomLineY, keySignature);
       _drawNoteLabel(canvas, note.label, x, bottomLineY + 48, active);
     }
   }
@@ -425,6 +464,49 @@ class _StaffPainter extends CustomPainter {
           fontSize: 42,
           fontStyle: FontStyle.italic,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, Offset(x, y));
+  }
+
+  void _drawKeySignature(
+    Canvas canvas,
+    _KeySignature keySignature,
+    double x,
+    double bottomLineY,
+    double halfStep,
+  ) {
+    if (keySignature.count == 0) {
+      return;
+    }
+
+    final steps = keySignature.count > 0
+        ? const [8, 5, 9, 6, 3, 7, 4]
+        : const [4, 7, 3, 6, 2, 5, 1];
+    final symbol = keySignature.count > 0 ? '#' : 'b';
+    final count = keySignature.count.abs();
+
+    for (var index = 0; index < count; index += 1) {
+      final y = bottomLineY - steps[index] * halfStep - 13;
+      _drawKeySignatureSymbol(canvas, symbol, x + index * 13, y);
+    }
+  }
+
+  void _drawKeySignatureSymbol(
+    Canvas canvas,
+    String symbol,
+    double x,
+    double y,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: symbol,
+        style: const TextStyle(
+          color: _staffColor,
+          fontSize: 21,
+          fontWeight: FontWeight.w800,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -478,6 +560,7 @@ class _StaffPainter extends CustomPainter {
     ScaleNote note,
     bool active,
     double bottomLineY,
+    _KeySignature keySignature,
   ) {
     final noteColor = active ? _activeColor : _staffColor;
     final notePaint = Paint()
@@ -518,7 +601,7 @@ class _StaffPainter extends CustomPainter {
     final stemEndY = stemUp ? y - 44 : y + 44;
     canvas.drawLine(Offset(stemX, y), Offset(stemX, stemEndY), stemPaint);
 
-    final accidental = _accidental(note.name);
+    final accidental = _writtenAccidental(note.name, keySignature);
     if (accidental != null) {
       _drawAccidental(canvas, accidental, x - 27, y - 14, active);
     }
@@ -590,8 +673,72 @@ class _StaffPainter extends CustomPainter {
     return null;
   }
 
+  String? _writtenAccidental(String noteName, _KeySignature keySignature) {
+    final accidental = _accidental(noteName);
+    if (accidental == null) {
+      return null;
+    }
+
+    final letter = noteName.substring(0, 1);
+    if (keySignature.count > 0 && accidental == '#') {
+      const sharpLetters = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+      if (sharpLetters.take(keySignature.count).contains(letter)) {
+        return null;
+      }
+    }
+
+    if (keySignature.count < 0 && accidental == 'b') {
+      const flatLetters = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+      if (flatLetters.take(keySignature.count.abs()).contains(letter)) {
+        return null;
+      }
+    }
+
+    return accidental;
+  }
+
   @override
   bool shouldRepaint(covariant _StaffPainter oldDelegate) {
-    return oldDelegate.notes != notes || oldDelegate.activeStep != activeStep;
+    return oldDelegate.root != root ||
+        oldDelegate.scalePattern != scalePattern ||
+        oldDelegate.notes != notes ||
+        oldDelegate.activeStep != activeStep;
   }
 }
+
+_KeySignature _keySignature(PitchClass root, ScalePattern scalePattern) {
+  final signatures = scalePattern == ScalePattern.naturalMinor
+      ? _minorKeySignatures
+      : _majorKeySignatures;
+  return _KeySignature(signatures[root] ?? 0);
+}
+
+const _majorKeySignatures = {
+  PitchClass.c: 0,
+  PitchClass.cSharp: 7,
+  PitchClass.d: 2,
+  PitchClass.eFlat: -3,
+  PitchClass.e: 4,
+  PitchClass.f: -1,
+  PitchClass.fSharp: 6,
+  PitchClass.g: 1,
+  PitchClass.aFlat: -4,
+  PitchClass.a: 3,
+  PitchClass.bFlat: -2,
+  PitchClass.b: 5,
+};
+
+const _minorKeySignatures = {
+  PitchClass.c: -3,
+  PitchClass.cSharp: 4,
+  PitchClass.d: -1,
+  PitchClass.eFlat: -6,
+  PitchClass.e: 1,
+  PitchClass.f: -4,
+  PitchClass.fSharp: 3,
+  PitchClass.g: -2,
+  PitchClass.aFlat: -7,
+  PitchClass.a: 0,
+  PitchClass.bFlat: -5,
+  PitchClass.b: 2,
+};
